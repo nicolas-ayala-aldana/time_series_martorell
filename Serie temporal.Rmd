@@ -1,0 +1,340 @@
+---
+title: "martorell 2021"
+author: "Nicolas Ayala"
+date: "10-01-2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+##Load dataset (columns and rows as a rectangule of data)
+```{r}
+#Load dataframe
+library(readxl)
+df_martorell_2021 <- read_excel("DADES_TD_AYALA_051221.xlsx", range = "A4:G277", col_types = c("date", "numeric", "numeric", 
+        "numeric", "numeric", "numeric", 
+        "numeric"))
+View(df_martorell_2021)
+
+#Rename cols (7 cols)
+colnames(df_martorell_2021)<-c("date","cases_attended","total_hospitalized", "patientes_pending_pcr","new_cases_user", "new_cases_professional", "patient_discharge")
+
+#Add col of consecutive day
+library(tibble)
+df_martorell_2021= add_column(df_martorell_2021, consecutive_days = 1:273, .after = "date")
+
+#Add total cases 
+library(dplyr)
+df_martorell_2021 <- df_martorell_2021 %>% rowwise() %>%
+  mutate(total_newcases_day = sum(c_across("new_cases_user":"new_cases_professional")))
+
+#Moving column("patient_discharge") at the end. In this way, "total_newcases_day" is together to"patientes_pending_pcr" and "new_cases_user"
+df_martorell_2021<-df_martorell_2021 %>% relocate(patient_discharge, .after = patientes_pending_pcr)
+
+#Dataset by week
+library(dplyr)
+library(lubridate)
+
+df_martorell_2021$week <- floor_date(df_martorell_2021$date, "week")
+
+df.hmartorell.2021<-df_martorell_2021 %>%
+  group_by(week) %>%
+   summarise_at(vars(cases_attended:total_newcases_day), sum, na.rm = TRUE)
+```
+
+##Variables
+```{r}
+##Showing the cols names
+names(df.hmartorell.2021)
+
+##Sample Size and numbers of variables
+dim(df.hmartorell.2021)
+
+##Null Values: False
+table(is.null(df.hmartorell.2021))
+
+##Class of Cols.
+sapply(df.hmartorell.2021, class)
+```
+
+
+
+##Plot of Variables
+
+```{r}
+
+Sys.setlocale("LC_TIME", "C")
+
+#1.Cases per consecutive days
+library(ggplot2)
+plot1<-ggplot(data=df.hmartorell.2021, aes(y=total_newcases_day, x=week)) +
+  geom_line(color="steelblue")+
+   theme_bw()+
+   ylim(0, 100)+
+   ggtitle (" New cases per Week.")+
+   xlab("2021")+
+   ylab("Casos")
+
+
+#2.Cases in Hospital of Martorell
+library(ggplot2)
+plot2<-ggplot(data=df.hmartorell.2021, aes(y=cases_attended, x=week)) +
+  geom_line(color="steelblue")+
+   theme_bw()+
+   ylim(0, 100)+
+   ggtitle (" Total cases attended.")+
+   xlab("2021")+
+   ylab("Casos")
+
+
+#3.Cases COVID-19 Hospitalized
+library(ggplot2)
+plot3<-ggplot(data=df.hmartorell.2021, aes(y=total_hospitalized, x=week)) +
+  geom_line(color="steelblue")+
+   theme_bw()+
+   ylim(0, 100)+
+   ggtitle (" Patients Hospitalized.")+
+   xlab("2021")+
+   ylab("Casos")
+
+#4.Patient Discharged
+library(ggplot2)
+plot4<-ggplot(data=df.hmartorell.2021, aes(y=patient_discharge, x=week)) +
+  geom_line(color="steelblue")+
+   theme_bw()+
+   ylim(0, 100)+
+   ggtitle (" Discharge of Patients.")+
+   xlab("2021")+
+   ylab("Casos")
+
+plot1
+plot2
+plot3
+plot4
+
+
+```
+
+#Cowplot for New Cases, Total Cases, Hospitalized and Discharged Patient
+```{r}
+library(cowplot)
+plot_grid(plot1,plot2,plot3,plot4,labels = c("A", "B", "C", "D"), ncol = 2, nrow = 2)
+
+```
+
+
+
+##Total Cases, new cases and hospitalized patients.
+## Otra opcion es suavizar la linea con la media de 7 dias
+```{r}
+library(ggplot2)
+ggplot(data=df.hmartorell.2021) +
+  geom_line(aes(x=week,y=total_newcases_day),color=3, size=0.1)+
+  geom_line(aes(x=week,y=cases_attended),color = 2, size=0.1)+
+  geom_line(aes(x=week,y=total_hospitalized),color=4, size=0.1)+
+  ylim(0,115)+
+  ylab('Cases')+xlab('Time Serie 2021')+
+  ggtitle("Cases COVID-19 in Hospital of Martorell")+
+  labs(color="Legend text")+
+  theme_minimal(base_size=9)
+
+#pivot variables
+library(dplyr)
+library(tidyr)
+library(readr)
+pivothmartorell2021<- df.hmartorell.2021%>% select(c(1,2,3,8)) %>%
+  pivot_longer(cols = -c(1)) 
+
+pivothmartorell2021<-pivothmartorell2021 %>% 
+  rename(
+    Cases = value,
+    Case_Type = name
+    )
+
+library(ggplot2)
+ggplot(pivothmartorell2021,aes(x=week,y=Cases, col=Case_Type))  +
+  geom_line(size=0.1)+
+  ylab('Cases')+xlab('Time Serie 2021')+
+  ggtitle("Cases COVID-19 in Hospital of Martorell")
+  theme_minimal(base_size=9)
+```
+
+## Comparison with Martorell Data
+## Web source (12/01/2021): https://dadescovid.cat/descarregues?lang=cas&tipus_territori=territori&scol=EXITUS&id_html=up_1_5&codi=08114&tipus=municipi
+```{r}
+#Import dataset.
+library(readr)
+municipi <- read_delim("casos_municipi.csv", delim = ";", escape_double = FALSE, col_types = cols(TIPUSCASDATA = col_date(format = "%d/%m/%Y")), trim_ws = TRUE)
+#View(municipi)
+library(dplyr)
+martorell_town<-municipi%>% filter(MUNICIPIDESCRIPCIO== "MARTORELL")
+
+##Summarise per date
+library(dplyr)
+martorell_town<-martorell_town %>%group_by(TIPUSCASDATA) %>%
+summarise(TOTCASOS = sum(NUMCASOS))
+
+#Rename cols (7 cols)
+colnames(martorell_town)<-c("date","new_cases")
+
+#Add col of consecutive day
+library(dplyr)
+martorell_town$consecutive_days <- 1:nrow(martorell_town) 
+martorell_town <- martorell_town %>% relocate(consecutive_days, .before = new_cases)
+
+#head of Dataframe
+head(martorell_town)
+
+library(lubridate)
+martorell_town$week <- floor_date(martorell_town$date, "week")
+
+martorell_town<-martorell_town %>%
+  group_by(week) %>%
+   summarise_at(vars(new_cases), sum, na.rm = TRUE)
+
+martorell_town
+```
+
+```{r}
+#Import dataset.
+library(readr)
+municipi <- read_delim("casos_municipi.csv", delim = ";", escape_double = FALSE, col_types = cols(TIPUSCASDATA = col_date(format = "%d/%m/%Y")), trim_ws = TRUE)
+#View(municipi)
+library(dplyr)
+barcelona_town<-municipi%>% filter(MUNICIPIDESCRIPCIO== "SANT FELIU DE LLOBREGAT")
+
+##Summarise per date
+library(dplyr)
+barcelona_town<-barcelona_town %>%group_by(TIPUSCASDATA) %>%
+summarise(TOTCASOS = sum(NUMCASOS))
+
+#Rename cols (7 cols)
+colnames(barcelona_town)<-c("date","new_cases")
+
+#Add col of consecutive day
+library(dplyr)
+barcelona_town$consecutive_days <- 1:nrow(barcelona_town) 
+barcelona_town <- barcelona_town %>% relocate(consecutive_days, .before = new_cases)
+
+#head of Dataframe
+head(barcelona_town)
+
+library(lubridate)
+barcelona_town$week <- floor_date(barcelona_town$date, "week")
+
+barcelona_town<-barcelona_town %>%
+  group_by(week) %>%
+   summarise_at(vars(new_cases), sum, na.rm = TRUE)
+
+barcelona_town
+```
+
+
+```{r}
+##COVID-19 cases in 2020-2022
+a<-ggplot(data= martorell_town , aes(week, new_cases))+
+  geom_col(fill= 4 )+
+  scale_x_date(limits = as.Date(c("2020-01-01", "2020-09-30")))+
+  ggtitle("New cases 2020")+
+  ylim(0,200)+
+  xlab("2020")+
+  ylab("Cases")
+
+##COVID cases in 2021 (jan-sept)
+b<-ggplot(data= martorell_town , aes(week, new_cases))+
+  geom_col(fill=2)+
+  scale_x_date(limits = as.Date(c("2021-01-01", "2021-09-30")))+
+  ggtitle("New cases 2021")+
+  ylim(0, 200)+
+  xlab("2021")+
+  ylab("Cases")
+
+##
+library(cowplot)
+plot_grid(a,b,  labels = c("A","B"), ncol = 1, nrow = 2)
+```
+
+```{r}
+#http://www.sthda.com/english/articles/32-r-graphics-essentials/128-plot-time-series-data-using-ggplot/
+
+
+
+barcelona_town.real<-barcelona_town[-c(1:44, 84:98), ]
+
+mtown2021 <- df.martorelltown.week[-c(1:43, 83:97), ]
+mhosp2021<- df.hmartorell.2021[-c(1), ]
+mhosp2021$week <- as.Date(mhosp2021$week)
+
+mhosptown = merge(x=mtown2021,y=mhosp2021,by= "week")
+mhosptown= merge(x=mhosptown, y= barcelona_town.real, by= "week")
+
+#pivot variables
+library(dplyr)
+library(tidyr)
+library(readr)
+library(ggplot2)
+
+mhosptown<- mhosptown%>% select(c(1,2,9,10)) %>%
+  pivot_longer(cols = -c(1)) 
+
+mhosptown<-mhosptown %>% 
+  rename(
+    Casos = value,
+    Type = name
+    )
+
+mhosptown$Type <- recode_factor(mhosptown$Type, new_cases.x = "New cases in Martorell", total_newcases_day = "New cases in Hospital", new_cases.y= "New cases in Sant Feliu de Llobregat" )
+
+Sys.setlocale("LC_TIME", "C")
+##Graph
+ggplot(mhosptown, aes(x = week, y = Casos, color= Type)) + 
+  geom_line(aes(linetype=Type, color=Type))+
+  ylab("Cases")+
+  xlab("2021")+
+  theme_minimal(base_size=10)
+```
+
+
+```{r}
+# Packages
+
+require(tidyverse)
+require(tidymodels)
+require(data.table)
+require(tidyposterior)
+require(tsibble)  #tsibble for time series based on tidy principles
+require(fable)  #for forecasting based on tidy principles
+require(ggfortify)  #for plotting timeseries
+require(forecast)  #for forecast function
+require(tseries)
+require(chron)
+require(lubridate)
+require(directlabels)
+require(zoo)
+require(lmtest)
+require(TTR)  #for smoothing the time series
+require(MTS)
+require(vars)
+require(fUnitRoots)
+require(lattice)
+require(grid)
+```
+
+```{r}
+library(lubridate)
+
+ts.martorell2021<- ts(df.hmartorell.2021, 
+   freq=365.25/7, 
+   start=decimal_date(ymd("2020-12-27")))
+
+# Main packages - problem: both have different functions VAR
+## Testing for stationarity
+### tseries - standard test adt.test
+apply(ts.martorell2021, 2, adf.test)
+
+```
+
